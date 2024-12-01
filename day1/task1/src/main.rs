@@ -13,7 +13,15 @@ fn main() {
     println!("The sum of the differences is: {}", sum);
 }
 
-// Read the contents of the input file and return a result of the file contents
+/// Reads the contents of the input file and returns a result of the file contents.
+///
+/// # Arguments
+///
+/// * `puzzle_path` - A string slice that holds the path to the input file.
+///
+/// # Returns
+///
+/// * `Result<String, std::io::Error>` - The contents of the file as a string or an error.
 fn read_to_string(puzzle_path: &str) -> Result<String, std::io::Error> {
     let mut file = File::open(puzzle_path)?;
     let mut contents = String::new();
@@ -21,11 +29,19 @@ fn read_to_string(puzzle_path: &str) -> Result<String, std::io::Error> {
     Ok(contents)
 }
 
-// Parse the input file and return a result of the two lists.
-//
-// The puzzle input is structured as 2 columns of numbers separated by any
-// number of whitespace characters. The left column is the first list and the
-// right column is the second list.
+/// Parses the input file and returns a result of the two lists.
+///
+/// The puzzle input is structured as 2 columns of numbers separated by any
+/// number of whitespace characters. The left column is the first list and the
+/// right column is the second list.
+///
+/// # Arguments
+///
+/// * `puzzle_input` - A string containing the contents of the input file.
+///
+/// # Returns
+///
+/// * `Result<(List, List), std::io::Error>` - A tuple containing two lists of integers or an error.
 fn parse(puzzle_input: String) -> Result<(List, List), std::io::Error> {
     let mut list1 = List::new();
     let mut list2 = List::new();
@@ -39,9 +55,18 @@ fn parse(puzzle_input: String) -> Result<(List, List), std::io::Error> {
     Ok((list1, list2))
 }
 
-// Calculate the sum of the absolute differences between the elements of the two
-// lists. The lists are assumed to be the same length and sorted in ascending
-// order.
+/// Calculates the sum of the absolute differences between the elements of the two
+/// lists. The lists are assumed to be the same length and sorted in ascending
+/// order.
+///
+/// # Arguments
+///
+/// * `list1` - A reference to the first list of integers.
+/// * `list2` - A reference to the second list of integers.
+///
+/// # Returns
+///
+/// * `i32` - The sum of the absolute differences between the elements of the two lists.
 fn sum_differences(list1: &List, list2: &List) -> i32 {
     list1
         .iter()
