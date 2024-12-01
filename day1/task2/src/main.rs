@@ -15,7 +15,15 @@ fn main() {
     println!("The sum of the simularity scores is: {}", sum);
 }
 
-// Read the contents of the input file and return a result of the file contents
+/// Reads the contents of the input file and returns a result of the file contents.
+///
+/// # Arguments
+///
+/// * `puzzle_path` - A string slice that holds the path to the input file.
+///
+/// # Returns
+///
+/// * `Result<String, std::io::Error>` - The contents of the file as a string or an error.
 fn read_to_string(puzzle_path: &str) -> Result<String, std::io::Error> {
     let mut file = File::open(puzzle_path)?;
     let mut contents = String::new();
@@ -23,11 +31,19 @@ fn read_to_string(puzzle_path: &str) -> Result<String, std::io::Error> {
     Ok(contents)
 }
 
-// Parse the input file and return a result of the two lists.
-//
-// The puzzle input is structured as 2 columns of numbers separated by any
-// number of whitespace characters. The left column is the first list and the
-// right column is the second list.
+/// Parses the input file and returns a result of the two lists.
+///
+/// The puzzle input is structured as 2 columns of numbers separated by any
+/// number of whitespace characters. The left column is the first list and the
+/// right column is the second list.
+///
+/// # Arguments
+///
+/// * `puzzle_input` - A string containing the contents of the input file.
+///
+/// # Returns
+///
+/// * `Result<(List, List), std::io::Error>` - A tuple containing the two lists or an error.
 fn parse(puzzle_input: String) -> Result<(List, List), std::io::Error> {
     let mut list1 = List::new();
     let mut list2 = List::new();
@@ -41,23 +57,41 @@ fn parse(puzzle_input: String) -> Result<(List, List), std::io::Error> {
     Ok((list1, list2))
 }
 
-// Binary search for the first instance of a number in a list.
+/// Performs a binary search for the first instance of a number in a list.
+///
+/// # Arguments
+///
+/// * `list` - A reference to a list of integers.
+/// * `num` - The number to search for.
+///
+/// # Returns
+///
+/// * `Option<usize>` - The position of the first instance of the number in the list or None if not found.
 fn binary_search_first_instance(list: &List, num: i32) -> Option<usize> {
     match list.binary_search(&num) {
         Ok(pos) => {
-            // Find the first instance by moving backwards until we find a different number
-            let mut first_pos = pos;
-            while first_pos > 0 && list[first_pos - 1] == num {
-                first_pos -= 1;
-            }
+            // Find the first instance by using rposition to find the starting index
+            let first_pos = list[..pos]
+                .iter()
+                .rposition(|&x| x != num)
+                .map_or(0, |p| p + 1);
             Some(first_pos)
         }
         Err(_) => None,
     }
 }
 
-// Create a frequency map of the two lists. We want to check how many times
-// a number from list1 appears in list2.
+/// Creates a frequency map of the two lists. We want to check how many times
+/// a number from list1 appears in list2.
+///
+/// # Arguments
+///
+/// * `list1` - A reference to the first list of integers.
+/// * `list2` - A reference to the second list of integers.
+///
+/// # Returns
+///
+/// * `FrequencyMap` - A map where the keys are the numbers from list1 and the values are their frequencies in list2.
 fn create_frequency_map(list1: &List, list2: &List) -> FrequencyMap {
     // Filter out duplicates from list1.
     let list1 = list1.iter().collect::<std::collections::HashSet<_>>();
@@ -87,13 +121,30 @@ fn create_frequency_map(list1: &List, list2: &List) -> FrequencyMap {
     freq_map
 }
 
-// Simularity score is the number passed in times by the frequency it appears
-// in the frequency map.
+/// Calculates the similarity score for a number based on its frequency in the frequency map.
+///
+/// # Arguments
+///
+/// * `num` - The number to calculate the similarity score for.
+/// * `freq_map` - A reference to the frequency map.
+///
+/// # Returns
+///
+/// * `i32` - The similarity score for the number.
 fn simularity_score(num: i32, freq_map: &FrequencyMap) -> i32 {
     num * freq_map.get(&num).unwrap()
 }
 
-// Sum the simularity scores of the two lists.
+/// Sums the similarity scores of the two lists.
+///
+/// # Arguments
+///
+/// * `list1` - A reference to the first list of integers.
+/// * `list2` - A reference to the second list of integers.
+///
+/// # Returns
+///
+/// * `i32` - The sum of the similarity scores of the two lists.
 fn sum_simularity_score(list1: &List, list2: &List) -> i32 {
     let freq_map = create_frequency_map(list1, list2);
     list1
@@ -134,7 +185,7 @@ mod tests {
 
     #[test]
     fn test_similarity_score() {
-        let mut list1 = vec![3, 4, 2, 1, 3, 3];
+        let mut list1 = [3, 4, 2, 1, 3, 3];
         list1.sort();
         let freq_map = {
             let mut map = FrequencyMap::new();
