@@ -27,8 +27,8 @@ fn read_to_string(puzzle_path: &str) -> Result<String, std::io::Error> {
     Ok(contents)
 }
 
-/// Parses the puzzle input and returns a vector of reports. Each report is a vector of integers.
-/// The integers are separated by a space.
+/// Parses the puzzle input and returns a vector of reports. Each report is a vector
+/// of integers. The integers are separated by a space.
 ///
 /// # Arguments
 ///
@@ -48,9 +48,13 @@ fn parse(puzzle_input: &str) -> Vec<Report> {
         .collect()
 }
 
-/// Checks if a report is safe. A report is safe if it satisfies the following conditions:
+/// Checks if a report is safe. A report is safe if it satisfies the following
+/// conditions:
 ///  - The levels are either all increasing or all decreasing.
 ///  - Any two adjacent levels differ by at least one and at most three.
+///
+/// If a report is not safe, it is possible to remove one level from the report to
+/// make it safe.
 ///
 /// # Arguments
 ///
@@ -89,15 +93,14 @@ fn is_safe(report: &Report) -> bool {
 fn check_safety(report: &Report) -> bool {
     let mut is_increasing = true;
     let mut is_decreasing = true;
-    let mut prev_level = report[0];
 
-    for level in report.iter().skip(1) {
-        let diff = (level - prev_level).abs();
+    for window in report.windows(2) {
+        let diff = (window[1] - window[0]).abs();
         if !(1..=3).contains(&diff) {
             return false;
         }
 
-        match prev_level.cmp(level) {
+        match window[0].cmp(&window[1]) {
             std::cmp::Ordering::Less => is_decreasing = false,
             std::cmp::Ordering::Greater => is_increasing = false,
             std::cmp::Ordering::Equal => {}
@@ -106,8 +109,6 @@ fn check_safety(report: &Report) -> bool {
         if !is_increasing && !is_decreasing {
             return false;
         }
-
-        prev_level = *level;
     }
     is_increasing || is_decreasing
 }

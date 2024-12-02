@@ -62,9 +62,12 @@ fn parse(puzzle_input: &str) -> Vec<Report> {
 fn is_safe(report: &Report) -> bool {
     let mut is_increasing = true;
     let mut is_decreasing = true;
-    let mut prev_level = report[0];
-    for level in report.iter().skip(1) {
-        match prev_level.cmp(level) {
+
+    for window in report.windows(2) {
+        let prev_level = window[0];
+        let level = window[1];
+
+        match prev_level.cmp(&level) {
             std::cmp::Ordering::Less => is_decreasing = false,
             std::cmp::Ordering::Greater => is_increasing = false,
             std::cmp::Ordering::Equal => {}
@@ -76,8 +79,6 @@ fn is_safe(report: &Report) -> bool {
         if (level - prev_level).abs() < 1 || (level - prev_level).abs() > 3 {
             return false;
         }
-
-        prev_level = *level;
     }
     is_increasing || is_decreasing
 }
