@@ -54,26 +54,56 @@ fn parse(puzzle_input: &str) -> Vec<Report> {
 ///
 /// # Arguments
 ///
-/// * `report` - A reference to a report, which is a vector of integers.
+/// * `report` - A reference to a report (vector of integers).
 ///
 /// # Returns
 ///
 /// * `bool` - `true` if the report is safe, `false` otherwise.
 fn is_safe(report: &Report) -> bool {
+    if check_safety(report) {
+        return true;
+    }
+
+    for i in 0..report.len() {
+        let mut modified_report = report.clone();
+        modified_report.remove(i);
+        if check_safety(&modified_report) {
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Checks if a report satisfies the safety conditions:
+///  - The levels are either all increasing or all decreasing.
+///  - Any two adjacent levels differ by at least one and at most three.
+///
+/// # Arguments
+///
+/// * `report` - A reference to a report (vector of integers).
+///
+/// # Returns
+///
+/// * `bool` - `true` if the report satisfies the safety conditions, `false` otherwise.
+fn check_safety(report: &Report) -> bool {
     let mut is_increasing = true;
     let mut is_decreasing = true;
     let mut prev_level = report[0];
+
     for level in report.iter().skip(1) {
+        let diff = (level - prev_level).abs();
+        if !(1..=3).contains(&diff) {
+            return false;
+        }
+
         match prev_level.cmp(level) {
             std::cmp::Ordering::Less => is_decreasing = false,
             std::cmp::Ordering::Greater => is_increasing = false,
             std::cmp::Ordering::Equal => {}
         }
-        if !is_increasing && !is_decreasing {
-            return false;
-        }
 
-        if (level - prev_level).abs() < 1 || (level - prev_level).abs() > 3 {
+        if !is_increasing && !is_decreasing {
             return false;
         }
 
@@ -95,7 +125,6 @@ fn safe_count(reports: Vec<Report>) -> usize {
     reports.iter().filter(|report| is_safe(report)).count()
 }
 
-// tests
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -128,9 +157,9 @@ mod tests {
         let report = vec![9, 7, 6, 2, 1];
         assert!(!is_safe(&report));
         let report = vec![1, 3, 2, 4, 5];
-        assert!(!is_safe(&report));
+        assert!(is_safe(&report));
         let report = vec![8, 6, 4, 4, 1];
-        assert!(!is_safe(&report));
+        assert!(is_safe(&report));
         let report = vec![1, 3, 6, 7, 9];
         assert!(is_safe(&report));
     }
@@ -145,6 +174,6 @@ mod tests {
             vec![8, 6, 4, 4, 1],
             vec![1, 3, 6, 7, 9],
         ];
-        assert_eq!(safe_count(reports), 2);
+        assert_eq!(safe_count(reports), 4);
     }
 }
