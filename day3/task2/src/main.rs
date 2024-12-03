@@ -1,14 +1,12 @@
 use regex::Regex;
 use std::{fs::File, io::Read};
 
-// Create an Instruction enum for mul instructions, do instructions and dont
-// instructions.
-//  - The Mul instruction will contain the two numbers that need to be
-//    multiplied together.
-//  - The Do is an enable flag to indicate that future instructions should be
-//    processed.
-//  - The Dont is a disable flag to indicate that future instructions should not
-//    be processed.
+/// An enum representing different types of instructions.
+///
+/// The `Instruction` enum has three variants:
+/// - `Mul(i32, i32)`: Represents a multiplication operation with two operands.
+/// - `Do()`: An enable flag to indicate that future instructions should be processed.
+/// - `Dont()`: A disable flag to indicate that future instructions should not be processed.
 #[derive(Debug, PartialEq)]
 enum Instruction {
     Mul(i32, i32),
@@ -74,6 +72,22 @@ fn parse(puzzle_input: &str) -> Vec<Instruction> {
         .collect()
 }
 
+/// Runs the instructions and returns the result of the multiplication.
+///
+/// The instructions are processed in order, and the result is calculated by
+/// multiplying the two numbers together.
+///
+/// The Do instruction enables the processing of future instructions.
+/// The Dont instruction disables the processing of future instructions.
+///
+/// # Arguments
+///
+/// * `instructions` - A vector of instructions to be processed.
+///
+/// # Returns
+///
+/// * `i32` - The result of the multiplication of the two numbers.
+///
 fn run_instructions(instructions: Vec<Instruction>) -> i32 {
     let mut result = 0;
     let mut do_flag = true;

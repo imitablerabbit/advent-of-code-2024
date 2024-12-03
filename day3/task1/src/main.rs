@@ -20,6 +20,7 @@ fn main() {
 /// # Returns
 ///
 /// * `Result<String, std::io::Error>` - The contents of the file as a string or an error.
+///
 fn read_to_string(puzzle_path: &str) -> Result<String, std::io::Error> {
     let mut file = File::open(puzzle_path)?;
     let mut contents = String::new();
@@ -41,6 +42,7 @@ fn read_to_string(puzzle_path: &str) -> Result<String, std::io::Error> {
 ///
 /// * `Vec<Instruction>` - A vector of instructions, where each Instruction is
 ///   a tuple of integers.
+///
 fn parse(puzzle_input: &str) -> Vec<Instruction> {
     // Use regex to find the instances of 'mul(a, b)' in the puzzle input.
     let re = Regex::new(r"mul\((\d{1,3}),\s*(\d{1,3})\)").unwrap();
@@ -54,6 +56,16 @@ fn parse(puzzle_input: &str) -> Vec<Instruction> {
         .collect()
 }
 
+/// Runs the instructions and returns the result of the multiplication of the two numbers.
+///
+/// # Arguments
+///
+/// * `instructions` - A vector of instructions, where each Instruction is a tuple of integers.
+///
+/// # Returns
+///
+/// * `i32` - The result of the multiplication of the two numbers in the instructions.
+///
 fn run_instructions(instructions: Vec<Instruction>) -> i32 {
     instructions.iter().fold(0, |acc, (a, b)| acc + a * b)
 }
