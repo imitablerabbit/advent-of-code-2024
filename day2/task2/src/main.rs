@@ -68,6 +68,8 @@ fn is_safe(report: &Report) -> bool {
         return true;
     }
 
+    // Run through all the levels and remove one level at a time to check if the
+    // modified report is safe.
     for i in 0..report.len() {
         let mut modified_report = report.clone();
         modified_report.remove(i);
