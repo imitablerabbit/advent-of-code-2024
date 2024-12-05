@@ -136,49 +136,16 @@ fn is_valid_order(before: usize, after: usize, rules: &Rules) -> bool {
     }
 }
 
-// Find the correct page order for a given page order.
-//
-// The algorithm to find the correct page order is as follows:
-//
-//  1. Pick a page in the page order to be first candidate.
-//  2. Loop through all the other pages and check if there is a rule that
-//     specifies that the candidate page must come after the current page.
-//  3. If there is such a rule, swap the candidate page with the current page.
-//  4. Repeat steps 1-3 until there are no more swaps.
-//  5. Insert the candidate page at the beginning of the page order.
-//  6. Repeat steps 1-5 for all pages in the page order.
-//
 fn correct_page_order(rules: &Rules, page_order: &[usize]) -> Vec<usize> {
     let mut page_order = page_order.to_vec();
-    let mut swapped = true;
-    while swapped {
-        swapped = false;
-        for i in 0..page_order.len() {
-            for j in i + 1..page_order.len() {
-                if must_come_after(page_order[j], page_order[i], rules) {
-                    page_order.swap(i, j);
-                    swapped = true;
-                }
-            }
+    page_order.sort_by(|&a, &b| {
+        if is_valid_order(a, b, rules) {
+            std::cmp::Ordering::Greater
+        } else {
+            std::cmp::Ordering::Less
         }
-    }
+    });
     page_order
-}
-
-/// Checks if a page must come after another page according to the provided rules.
-/// This function is used to determine if a page should be swapped with another page
-/// in order to correct the page order.
-/// # Arguments
-/// * `page` - The page number that must come after.
-/// * `after` - The page number that comes after.
-/// * `rules` - A reference to the rules for page ordering.
-/// # Returns
-/// `true` if the page must come after, `false` otherwise.
-fn must_come_after(page: usize, after: usize, rules: &Rules) -> bool {
-    match rules.get(&page) {
-        Some(allowed_pages) => allowed_pages.contains(&after),
-        None => false,
-    }
 }
 
 /// Sums the middle pages of each page order in the collection.
