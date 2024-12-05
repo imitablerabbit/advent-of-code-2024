@@ -93,10 +93,10 @@ fn parse_pages(pages: &str) -> Pages {
 ///
 /// A vector of valid page orders. Each page order is checked to ensure that the page numbers
 /// are in the correct order according to the rules.
-fn filter_invalid_pages(rules: &Rules, pages: &Pages) -> Vec<Vec<usize>> {
+fn filter_valid_pages(rules: &Rules, pages: &Pages) -> Vec<Vec<usize>> {
     pages
         .iter()
-        .filter(|page| is_valid_page_order(rules, page))
+        .filter(|page| !is_valid_page_order(rules, page))
         .cloned()
         .collect()
 }
@@ -136,6 +136,51 @@ fn is_valid_order(before: usize, after: usize, rules: &Rules) -> bool {
     }
 }
 
+// Find the correct page order for a given page order.
+//
+// The algorithm to find the correct page order is as follows:
+//
+//  1. Pick a page in the page order to be first candidate.
+//  2. Loop through all the other pages and check if there is a rule that
+//     specifies that the candidate page must come after the current page.
+//  3. If there is such a rule, swap the candidate page with the current page.
+//  4. Repeat steps 1-3 until there are no more swaps.
+//  5. Insert the candidate page at the beginning of the page order.
+//  6. Repeat steps 1-5 for all pages in the page order.
+//
+fn correct_page_order(rules: &Rules, page_order: &[usize]) -> Vec<usize> {
+    let mut page_order = page_order.to_vec();
+    let mut swapped = true;
+    while swapped {
+        swapped = false;
+        for i in 0..page_order.len() {
+            for j in i + 1..page_order.len() {
+                if must_come_after(page_order[j], page_order[i], rules) {
+                    page_order.swap(i, j);
+                    swapped = true;
+                }
+            }
+        }
+    }
+    page_order
+}
+
+/// Checks if a page must come after another page according to the provided rules.
+/// This function is used to determine if a page should be swapped with another page
+/// in order to correct the page order.
+/// # Arguments
+/// * `page` - The page number that must come after.
+/// * `after` - The page number that comes after.
+/// * `rules` - A reference to the rules for page ordering.
+/// # Returns
+/// `true` if the page must come after, `false` otherwise.
+fn must_come_after(page: usize, after: usize, rules: &Rules) -> bool {
+    match rules.get(&page) {
+        Some(allowed_pages) => allowed_pages.contains(&after),
+        None => false,
+    }
+}
+
 /// Sums the middle pages of each page order in the collection.
 ///
 /// # Arguments
@@ -168,8 +213,12 @@ fn main() {
     let puzzle_path = "input/input.txt";
     let puzzle_input = read_to_string(puzzle_path).unwrap();
     let (rules, pages) = parse_input(&puzzle_input);
-    let valid_pages = filter_invalid_pages(&rules, &pages);
-    let sum = sum_middle_pages(&valid_pages);
+    let invalid_pages = filter_valid_pages(&rules, &pages);
+    let corrected_pages = invalid_pages
+        .iter()
+        .map(|page| correct_page_order(&rules, page))
+        .collect();
+    let sum = sum_middle_pages(&corrected_pages);
     println!("{}", sum);
 }
 
@@ -216,7 +265,7 @@ mod tests {
     #[test]
     fn test_filter_invalid_pages() {
         let (rules, pages) = parse_input(PUZZLE_INPUT);
-        let valid_pages = filter_invalid_pages(&rules, &pages);
+        let valid_pages = filter_valid_pages(&rules, &pages);
         println!("{:?}", valid_pages);
         assert_eq!(valid_pages.len(), 3);
     }
@@ -224,7 +273,20 @@ mod tests {
     #[test]
     fn test_sum_middle_pages() {
         let (rules, pages) = parse_input(PUZZLE_INPUT);
-        let valid_pages = filter_invalid_pages(&rules, &pages);
-        assert_eq!(sum_middle_pages(&valid_pages), 143);
+        let valid_pages = filter_valid_pages(&rules, &pages);
+        let sum = sum_middle_pages(&valid_pages);
+        assert_eq!(sum, 135); // This is the invalid pages now as its changed for task2
+    }
+
+    #[test]
+    fn test_correct_page_order() {
+        let (rules, pages) = parse_input(PUZZLE_INPUT);
+        let invalid_pages = filter_valid_pages(&rules, &pages);
+        let corrected_pages: Pages = invalid_pages
+            .iter()
+            .map(|page| correct_page_order(&rules, page))
+            .collect();
+        let sum = sum_middle_pages(&corrected_pages);
+        assert_eq!(sum, 123);
     }
 }
