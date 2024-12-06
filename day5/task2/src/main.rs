@@ -113,7 +113,7 @@ fn filter_valid_pages(rules: &Rules, pages: &Pages) -> Vec<Vec<usize>> {
 /// `true` if the page order is valid, `false` otherwise.
 fn is_valid_page_order(rules: &Rules, page_order: &[usize]) -> bool {
     page_order.iter().enumerate().all(|(i, page)| {
-        let before = &page_order[..i];
+        let before: &[usize] = &page_order[..i];
         before.iter().all(|&b| is_valid_order(b, *page, rules))
     })
 }
