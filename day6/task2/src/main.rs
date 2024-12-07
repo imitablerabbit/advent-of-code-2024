@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 use std::{fmt, fs::File, io::Read};
 
 /// Custom error type for invalid maps.
@@ -35,6 +36,7 @@ impl fmt::Display for MapError {
 struct Map {
     /// The map of the puzzle.
     map: Vec<Vec<String>>,
+    initial_map: Vec<Vec<String>>,
 
     /// The height and width of the map.
     height: usize,
@@ -44,9 +46,6 @@ struct Map {
     initial_position: (usize, usize),
     position: (usize, usize),
     direction: String,
-
-    /// Potential loop coords
-    loop_obstacle_coords: Vec<(usize, usize)>,
 }
 
 impl Map {
@@ -66,14 +65,15 @@ impl Map {
         let width = map[0].len();
         let position = Self::find_guard(&map)?;
         let direction = map[position.1][position.0].clone();
+        let initial_map = map.clone();
         Ok(Self {
             map,
+            initial_map,
             height,
             width,
             initial_position: position,
             position,
             direction,
-            loop_obstacle_coords: Vec::new(),
         })
     }
 
@@ -126,12 +126,6 @@ impl Map {
                     break;
                 }
             }
-
-            // At this point we have moved the guard. We need to check if we are
-            // able to create a loop.
-            if self.check_loop_obstacle() {
-                // println!("{}", self);
-            }
         }
         if is_loop {
             Err(MapError::new_walk_loop_detected("Loop detected"))
@@ -140,123 +134,42 @@ impl Map {
         }
     }
 
-    fn check_loop_obstacle(&mut self) -> bool {
-        let mut found_loop_obstacle = false;
-        match self.direction.as_str() {
-            Self::UP_CHAR => {
-                if let Some(c) = self.peek_up() {
-                    if self.check_if_visited_right(self.position.0, self.position.1)
-                        && c == Self::FREE_SPACE_CHAR
-                    {
-                        let obstacle_position = (self.position.0, self.position.1 - 1);
-                        self.loop_obstacle_coords.push(obstacle_position);
-                        found_loop_obstacle = true;
-                    }
-                }
-            }
-            Self::RIGHT_CHAR => {
-                if let Some(c) = self.peek_right() {
-                    if self.check_if_visited_down(self.position.0, self.position.1)
-                        && c == Self::FREE_SPACE_CHAR
-                    {
-                        let obstacle_position = (self.position.0 + 1, self.position.1);
-                        self.loop_obstacle_coords.push(obstacle_position);
-                        found_loop_obstacle = true;
-                    }
-                }
-            }
-            Self::DOWN_CHAR => {
-                if let Some(c) = self.peek_down() {
-                    if self.check_if_visited_left(self.position.0, self.position.1)
-                        && c == Self::FREE_SPACE_CHAR
-                    {
-                        let obstacle_position = (self.position.0, self.position.1 + 1);
-                        self.loop_obstacle_coords.push(obstacle_position);
-                        found_loop_obstacle = true;
-                    }
-                }
-            }
-            Self::LEFT_CHAR => {
-                if let Some(c) = self.peek_left() {
-                    if self.check_if_visited_up(self.position.0, self.position.1)
-                        && c == Self::FREE_SPACE_CHAR
-                    {
-                        let obstacle_position = (self.position.0 - 1, self.position.1);
-                        self.loop_obstacle_coords.push(obstacle_position);
-                        found_loop_obstacle = true;
-                    }
-                }
-            }
-            _ => {}
-        }
-        found_loop_obstacle
-    }
-
-    fn count_loop_obstacles(&self) -> usize {
-        // Make sure that there ar no obstacles placed on the guard's initial
-        // position.
-        self.loop_obstacle_coords
-            .iter()
-            .filter(|(x, y)| (*x, *y) != self.initial_position)
-            .count()
-    }
-
-    // Loop over all the positions above the current position and check if
-    // any of them have been visited in the direction we are moving. If we
-    // encounter an obstacle or an out of bounds position, we stop.
+    // Loop through all the visited cells and add an obstacle to each cell.
+    // Check to see if the guard can still walk the path without encountering
+    // a loop.
     //
-    // We need to check one cell at a time because we need to check if the
-    // obstacle is before we hit a visited cell.
-    fn check_if_visited_up(&self, x: usize, y: usize) -> bool {
-        for y in (0..y).rev() {
-            let c = &self.map[y][x];
-            if c.contains(Self::VISITED_UP_CHAR) {
-                return true;
-            }
-            if c == Self::OBSTACLE_CHAR {
-                break;
-            }
-        }
-        false
-    }
-
-    fn check_if_visited_down(&self, x: usize, y: usize) -> bool {
-        for y in y + 1..self.height {
-            let c = &self.map[y][x];
-            if c.contains(Self::VISITED_DOWN_CHAR) {
-                return true;
-            }
-            if c == Self::OBSTACLE_CHAR {
-                break;
-            }
-        }
-        false
-    }
-
-    fn check_if_visited_left(&self, x: usize, y: usize) -> bool {
-        for x in (0..x).rev() {
-            let c = &self.map[y][x];
-            if c.contains(Self::VISITED_LEFT_CHAR) {
-                return true;
-            }
-            if c == Self::OBSTACLE_CHAR {
-                break;
-            }
-        }
-        false
-    }
-
-    fn check_if_visited_right(&self, x: usize, y: usize) -> bool {
-        for x in x + 1..self.width {
-            let c = &self.map[y][x];
-            if c.contains(Self::VISITED_RIGHT_CHAR) {
-                return true;
-            }
-            if c == Self::OBSTACLE_CHAR {
-                break;
-            }
-        }
-        false
+    // We want to find all the obstacles that would cause a loop.
+    fn find_loop_permutations(&self) -> Vec<(usize, usize)> {
+        let loop_obstacles: Vec<(usize, usize)> = self
+            .map
+            .par_iter()
+            .enumerate()
+            .flat_map(|(y, row)| {
+                row.par_iter()
+                    .enumerate()
+                    .filter_map(move |(x, c)| {
+                        if c.contains(Self::VISITED_UP_CHAR)
+                            || c.contains(Self::VISITED_DOWN_CHAR)
+                            || c.contains(Self::VISITED_LEFT_CHAR)
+                            || c.contains(Self::VISITED_RIGHT_CHAR)
+                        {
+                            // Skip the cell if it is the starting position of the guard.
+                            if (x, y) == self.initial_position {
+                                return None;
+                            }
+                            let mut map = self.initial_map.clone();
+                            map[y][x] = Self::OBSTACLE_CHAR.to_string();
+                            let mut map = Map::new(map).expect("Failed to create map");
+                            if map.walk_path().is_err() {
+                                return Some((x, y));
+                            }
+                        }
+                        None
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        loop_obstacles
     }
 
     fn peek(&self) -> Option<&String> {
@@ -502,7 +415,9 @@ fn main() {
     map.walk_path().expect("Failed to walk path");
     println!("{}", map);
     println!("Visited: {}", map.count_visited());
-    println!("Loop obstacles: {}", map.count_loop_obstacles());
+    let loop_obstacles = map.find_loop_permutations();
+    println!("Loop obstacles: {:?}", loop_obstacles);
+    println!("Loop obstacles count: {}", loop_obstacles.len());
 }
 
 #[cfg(test)]
@@ -567,11 +482,11 @@ mod tests {
     fn test_count_potential_loop_obstacles() {
         let mut map = parse_input(PUZZLE_INPUT).expect("Failed to parse input");
         map.walk_path().expect("Failed to walk path");
-        assert_eq!(map.loop_obstacle_coords.len(), 6);
+        let loop_obstacles = map.find_loop_permutations();
+        assert_eq!(loop_obstacles.len(), 6);
         assert_eq!(
-            map.loop_obstacle_coords,
-            vec![(3, 6), (6, 7), (3, 8), (1, 8), (7, 7), (7, 9)]
+            loop_obstacles,
+            vec![(3, 6), (6, 7), (7, 7), (1, 8), (3, 8), (7, 9)]
         );
-        assert_eq!(map.count_loop_obstacles(), 6);
     }
 }
