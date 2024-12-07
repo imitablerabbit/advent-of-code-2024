@@ -19,3 +19,6 @@ Advent of Code 2024 solutions in Rust.
 - [Day 5](day5)
   - [Day 5 Task 1](day5/task1/src/main.rs)
   - [Day 5 Task 2](day5/task2/src/main.rs)
+- [Day 6](day6)
+  - [Day 6 Task 1](day6/task1/src/main.rs)
+  - [Day 6 Task 2](day6/task2/src/main.rs)
