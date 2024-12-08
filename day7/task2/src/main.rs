@@ -62,9 +62,6 @@ impl Equation {
     /// calculate the equation.
     ///
     fn calculation_permutations(&self) -> Vec<Calculation> {
-        // If we ever needed to speed this up we could probably cache the
-        // permutations and then just pull them out of the cache when needed
-        // based in the size of the operands. For now its fast enough.
         let size = self.operands.len() - 1;
         operator_cartesian_product(size)
             .into_par_iter()
