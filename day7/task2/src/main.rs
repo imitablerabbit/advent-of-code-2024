@@ -1,3 +1,4 @@
+use cached::proc_macro::cached;
 use itertools::Itertools;
 use rayon::prelude::*;
 use std::{fmt, fs::File, io::Read};
@@ -35,9 +36,6 @@ impl Equation {
 
     fn determine_calculation(&self) -> Result<Calculation, CalculationError> {
         let permutations = self.calculation_permutations();
-        permutations.iter().for_each(|calc| {
-            // println!("{}", calc);
-        });
         permutations
             .into_par_iter()
             .find_map_first(|mut calc| {
@@ -51,18 +49,35 @@ impl Equation {
             .ok_or(CalculationError::NoValidOperators)
     }
 
+    /// Calculates the cartesian product of the available operators N times
+    /// where N is the number of operands - 1. This will give us all the
+    /// combinations of operators that can be used to calculate the equation.
+    ///
+    /// The cartesian product maps one set with every element in another set.
+    /// In this case we are actually mapping the same set to itself N times.
+    ///
+    /// # Returns
+    ///
+    /// * `Vec<Calculation>` - A vector of calculations that can be used to
+    /// calculate the equation.
+    ///
     fn calculation_permutations(&self) -> Vec<Calculation> {
         // If we ever needed to speed this up we could probably cache the
         // permutations and then just pull them out of the cache when needed
         // based in the size of the operands. For now its fast enough.
-        let operators = vec![Operator::Add, Operator::Multiply, Operator::Concatinate];
         let size = self.operands.len() - 1;
-        let repeated_iter = std::iter::repeat(operators).take(size);
-        repeated_iter
-            .multi_cartesian_product()
-            .map(|ops| Calculation::new(self.clone(), ops))
+        operator_cartesian_product(size)
+            .into_par_iter()
+            .map(|operators| Calculation::new(self.clone(), operators))
             .collect()
     }
+}
+
+#[cached]
+fn operator_cartesian_product(size: usize) -> Vec<Vec<Operator>> {
+    let operators = vec![Operator::Add, Operator::Multiply, Operator::Concatinate];
+    let repeated_iter = std::iter::repeat(operators).take(size);
+    repeated_iter.multi_cartesian_product().collect()
 }
 
 impl Calculation {
@@ -87,9 +102,10 @@ impl Calculation {
                 Operator::Add => acc + operand,
                 Operator::Multiply => acc * operand,
                 Operator::Concatinate => {
-                    let mut acc = acc.to_string();
-                    acc.push_str(&operand.to_string());
-                    acc.parse().unwrap()
+                    // Rather than concatenating both as strings and then parsing
+                    // the string back to a number we can just multiply the left
+                    // operand by 10 to the power of the right operand's length.
+                    acc * 10_u64.pow(operand.to_string().len() as u32) + operand
                 }
             },
         );
@@ -171,7 +187,7 @@ fn parse_input(input: &str) -> Result<Vec<Equation>, std::num::ParseIntError> {
 
 fn filter_invalid_equations(equations: Vec<Equation>) -> Vec<Equation> {
     equations
-        .into_iter()
+        .into_par_iter()
         .filter(|equation| equation.determine_calculation().is_ok())
         .collect()
 }
@@ -181,7 +197,7 @@ fn main() {
     let puzzle_input = read_to_string(puzzle_path).unwrap();
     let equations = parse_input(&puzzle_input).unwrap();
     let valid_equations = filter_invalid_equations(equations);
-    let sum: u64 = valid_equations.iter().map(|eq| eq.value).sum();
+    let sum: u64 = valid_equations.into_par_iter().map(|eq| eq.value).sum();
     println!("Sum of valid equations: {}", sum);
 }
 
