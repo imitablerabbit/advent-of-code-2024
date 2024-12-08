@@ -52,6 +52,9 @@ impl Equation {
     }
 
     fn calculation_permutations(&self) -> Vec<Calculation> {
+        // If we ever needed to speed this up we could probably cache the
+        // permutations and then just pull them out of the cache when needed
+        // based in the size of the operands. For now its fast enough.
         let operators = vec![Operator::Add, Operator::Multiply, Operator::Concatinate];
         let size = self.operands.len() - 1;
         let repeated_iter = std::iter::repeat(operators).take(size);
