@@ -70,7 +70,7 @@ impl Equation {
     }
 }
 
-#[cached]
+#[cached(size = 20)]
 fn operator_cartesian_product(size: usize) -> Vec<Vec<Operator>> {
     let operators = vec![Operator::Add, Operator::Multiply, Operator::Concatinate];
     let repeated_iter = std::iter::repeat(operators).take(size);
@@ -101,8 +101,8 @@ impl Calculation {
                 Operator::Concatinate => {
                     // Rather than concatenating both as strings and then parsing
                     // the string back to a number we can just multiply the left
-                    // operand by 10 to the power of the right operand's length.
-                    acc * 10_u64.pow(operand.to_string().len() as u32) + operand
+                    // operand by 10 to the power of the right operand's log10.
+                    acc * 10_u64.pow(operand.ilog10() + 1) + operand
                 }
             },
         );
