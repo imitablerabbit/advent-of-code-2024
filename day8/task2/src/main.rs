@@ -60,6 +60,15 @@ impl fmt::Display for Map {
 }
 
 impl Map {
+    /// Returns a hashmap of all the antennas on the map. The key is the antenna
+    /// type and the value is a vector of tuples containing the x and y coordinates
+    /// of the antenna.
+    ///
+    /// # Returns
+    ///
+    /// * `AntennaMap` - A hashmap where the key is the antenna type and the value
+    /// is a vector of tuples containing the x and y coordinates of the antenna.
+    ///
     fn get_antennas(&self) -> AntennaMap {
         let mut antennas = AntennaMap::new();
         for row in &self.cells {
@@ -74,6 +83,9 @@ impl Map {
         antennas
     }
 
+    /// Adds all the antinodes to the map. The antinodes are calculated for all
+    /// pairs of antennas of the same type. The antinodes are then stored in the
+    /// cells of the map.
     fn add_all_antinodes(&mut self) {
         let antinodes = self.find_all_antinodes();
         for (antenna, coords) in antinodes {
@@ -85,10 +97,56 @@ impl Map {
         }
     }
 
+    /// Calculate antinodes for all pairs of antennas. The antinodes are calculated
+    /// for all pairs of antennas of the same type. The antinodes are then stored
+    /// in a hashmap where the key is the antenna type. This function will also
+    /// remove duplicates and sort the antinodes for each antenna but will not
+    /// remove duplications between antenna types.
+    ///
+    /// # Returns
+    ///
+    /// * `HashMap<char, Vec<(usize, usize)>>` - A hashmap where the key is the antenna
+    ///
+    fn find_all_antinodes(&self) -> AntinodeMap {
+        let antennas = self.get_antennas();
+        let mut antinodes = AntennaMap::new();
+        for (antenna, coords) in &antennas {
+            coords.iter().combinations(2).for_each(|v| {
+                let a = v[0];
+                let b = v[1];
+                if a != b {
+                    let new_antinodes = self.find_antinodes_within_map(*a, *b);
+                    for antinode in new_antinodes {
+                        antinodes.entry(*antenna).or_default().push(antinode);
+                    }
+                }
+            });
+        }
+
+        // Remove duplicates and sort the antinodes
+        antinodes.iter_mut().for_each(|(_, v)| {
+            v.sort();
+            v.dedup();
+        });
+
+        antinodes
+    }
+
     /// Calculates all the antinode of two antennas. The antinodes are all the points
     /// on a line drawn from two antennas. The distance between the antennas is
     /// calculated and the antinodes must appear with this as a minimum distance.
     /// The antennas themselves are also considered antinodes.
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - A tuple of the x and y coordinates of the first antenna.
+    /// * `b` - A tuple of the x and y coordinates of the second antenna.
+    ///
+    /// # Returns
+    ///
+    /// * `Vec<(usize, usize)>` - A vector of tuples containing the x and y
+    /// coordinates of the antinodes.
+    ///
     fn find_antinodes_within_map(
         &self,
         a: (usize, usize),
@@ -98,46 +156,36 @@ impl Map {
         let (x2, y2) = b;
         let dx = x2 as isize - x1 as isize;
         let dy = y2 as isize - y1 as isize;
-        let mut step = 0;
-        let mut antinodes = vec![];
+
+        let mut antinodes = vec![a, b];
+
+        // Go forwards in the line
+        let mut step = 1;
         loop {
-            let x = x1 as isize + dx * step;
-            let y = y1 as isize + dy * step;
+            let x = x2 as isize + dx * step;
+            let y = y2 as isize + dy * step;
             if x < 0 || y < 0 || x >= self.width as isize || y >= self.height as isize {
                 break;
             }
             step += 1;
             antinodes.push((x as usize, y as usize));
         }
-        antinodes
-    }
 
-    /// Calculate antinodes for all pairs of antennas.
-    fn find_all_antinodes(&self) -> AntinodeMap {
-        let antennas = self.get_antennas();
-        let mut antinodes = AntennaMap::new();
-        for (antenna, coords) in &antennas {
-            // Compute the cartesian product of the coords for the antennas
-            // of the same type. This will give us all pairs of antennas.
-            coords
-                .iter()
-                .cartesian_product(coords.iter())
-                .for_each(|(a, b)| {
-                    if a != b {
-                        let new_antinodes = self.find_antinodes_within_map(*a, *b);
-                        for antinode in new_antinodes {
-                            antinodes.entry(*antenna).or_default().push(antinode);
-                        }
-                    }
-                });
+        // Go backwards in the line
+        step = -1;
+        loop {
+            let x = x1 as isize + dx * step;
+            let y = y1 as isize + dy * step;
+            if x < 0 || y < 0 || x >= self.width as isize || y >= self.height as isize {
+                break;
+            }
+            step -= 1;
+            antinodes.push((x as usize, y as usize));
         }
 
         // Remove duplicates and sort the antinodes
-        antinodes.iter_mut().for_each(|(_, v)| {
-            v.sort();
-            v.dedup();
-        });
-
+        antinodes.sort();
+        antinodes.dedup();
         antinodes
     }
 }
@@ -150,7 +198,8 @@ impl Map {
 ///
 /// # Returns
 ///
-/// * `Result<String, std::io::Error>` - The contents of the file as a string, or an error if the file could not be read.
+/// * `Result<String, std::io::Error>` - The contents of the file as a string,
+/// or an error if the file could not be read.
 fn read_to_string(puzzle_path: &str) -> Result<String, std::io::Error> {
     let mut file = File::open(puzzle_path)?;
     let mut contents = String::new();
@@ -158,6 +207,17 @@ fn read_to_string(puzzle_path: &str) -> Result<String, std::io::Error> {
     Ok(contents)
 }
 
+/// Parses the input string and returns a result of the map.
+///
+/// # Arguments
+///
+/// * `input` - A string slice that holds the input string.
+///
+/// # Returns
+///
+/// * `Result<Map, MapError>` - The map struct, or an error if the input could
+/// not be parsed.
+///
 fn parse_input(input: &str) -> Result<Map, MapError> {
     let cells: Vec<Vec<Cell>> = input
         .lines()
@@ -366,7 +426,7 @@ mod tests {
         let expected_antinodes = vec![(1, 1), (3, 3), (5, 5), (7, 7)]; // positive direction
         assert_eq!(antinodes, expected_antinodes);
         let antinodes2 = map.find_antinodes_within_map(b, a);
-        let expected_antinodes2 = vec![(3, 3), (1, 1)]; // negative direction
+        let expected_antinodes2 = vec![(1, 1), (3, 3), (5, 5), (7, 7)]; // negative direction
         assert_eq!(antinodes2, expected_antinodes2);
     }
 
@@ -386,7 +446,19 @@ mod tests {
         let map = parsed_map3();
         let mut antinodes = map.find_all_antinodes();
         let mut expected_antinodes = AntinodeMap::new();
-        expected_antinodes.insert('a', vec![(3, 1), (6, 7), (0, 2), (2, 6)]);
+        expected_antinodes.insert(
+            'a',
+            vec![
+                (0, 2),
+                (2, 6),
+                (3, 1),
+                (4, 3),
+                (5, 5),
+                (6, 7),
+                (7, 9),
+                (8, 4),
+            ],
+        );
         antinodes.iter_mut().for_each(|(_, v)| v.sort());
         expected_antinodes.iter_mut().for_each(|(_, v)| v.sort());
         assert_eq!(antinodes, expected_antinodes);
