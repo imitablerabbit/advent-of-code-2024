@@ -49,6 +49,7 @@ struct Map {
 }
 
 impl Map {
+    // Constants representing different characters on the map.
     const UP_CHAR: &'static str = "^";
     const DOWN_CHAR: &'static str = "v";
     const LEFT_CHAR: &'static str = "<";
@@ -60,6 +61,15 @@ impl Map {
     const OBSTACLE_CHAR: &'static str = "#";
     const FREE_SPACE_CHAR: &'static str = ".";
 
+    /// Creates a new `Map` instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `map` - A 2D vector representing the map.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Map, MapError>` - A result containing the new `Map` instance or a `MapError`.
     fn new(map: Vec<Vec<String>>) -> Result<Map, MapError> {
         let height = map.len();
         let width = map[0].len();
@@ -77,13 +87,22 @@ impl Map {
         })
     }
 
-    fn find_guard(map: &[Vec<String>]) -> Result<(usize, usize), MapError> {
+    /// Finds the guard's initial position on the map.
+    ///
+    /// # Arguments
+    ///
+    /// * `map` - A reference to a 2D vector representing the map.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<(usize, usize), MapError>` - A result containing the guard's position or a `MapError`.
+    fn find_guard(map: &Vec<Vec<String>>) -> Result<(usize, usize), MapError> {
         for (y, row) in map.iter().enumerate() {
-            for (x, c) in row.iter().enumerate() {
-                if *c == Self::UP_CHAR
-                    || *c == Self::DOWN_CHAR
-                    || *c == Self::LEFT_CHAR
-                    || *c == Self::RIGHT_CHAR
+            for (x, cell) in row.iter().enumerate() {
+                if cell == Self::UP_CHAR
+                    || cell == Self::DOWN_CHAR
+                    || cell == Self::LEFT_CHAR
+                    || cell == Self::RIGHT_CHAR
                 {
                     return Ok((x, y));
                 }
@@ -92,6 +111,11 @@ impl Map {
         Err(MapError::new_invalid_map("Guard not found"))
     }
 
+    /// Walks the path on the map starting from the guard's initial position.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<(), MapError>` - A result indicating success or a `MapError` if a loop is detected.
     fn walk_path(&mut self) -> Result<(), MapError> {
         let mut is_loop = false;
         loop {
@@ -117,7 +141,7 @@ impl Map {
                 }
                 (Some(..), _) => {
                     // We are moving and there are no obstacles in our way.
-                    // This is also not a loop even through we have visited
+                    // This is also not a loop even though we have visited
                     // this space before going in a different direction.
                     self.move_guard()?
                 }
@@ -134,11 +158,12 @@ impl Map {
         }
     }
 
-    // Loop through all the visited cells and add an obstacle to each cell.
-    // Check to see if the guard can still walk the path without encountering
-    // a loop.
-    //
-    // We want to find all the obstacles that would cause a loop.
+    /// Finds all the obstacles that would cause a loop if added to the map.
+    ///
+    /// # Returns
+    ///
+    /// * `Vec<(usize, usize)>` - A vector of positions where adding an obstacle
+    /// would cause a loop.
     fn find_loop_permutations(&self) -> Vec<(usize, usize)> {
         let loop_obstacles: Vec<(usize, usize)> = self
             .map
