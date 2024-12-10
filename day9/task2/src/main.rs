@@ -58,7 +58,6 @@ impl Disk {
                 .unwrap_or(0);
 
             if file_block_index == 0 {
-                println!("No more files to defragment");
                 break;
             }
 
@@ -160,6 +159,11 @@ impl Disk {
 
     /// Calculate the checksum of the disk. The checksum is calculated by
     /// multiplying the position of the file block by the id of the file block.
+    ///
+    /// # Returns
+    ///
+    /// * `usize` - The checksum of the disk.
+    ///
     fn checksum(&self) -> usize {
         let mut pos = 0;
         let mut checksum = 0;

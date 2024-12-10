@@ -67,6 +67,7 @@ fn parse(puzzle_input: String) -> Result<(List, List), std::io::Error> {
 /// # Returns
 ///
 /// * `i32` - The sum of the absolute differences between the elements of the two lists.
+///
 fn sum_differences(list1: &List, list2: &List) -> i32 {
     list1
         .iter()
