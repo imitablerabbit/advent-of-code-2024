@@ -83,8 +83,8 @@ fn find_all_paths(
     let result = astar_bag_collect(
         &start_point,
         successors,
-        |_: &(usize, usize)| -> usize { 1 },
-        |&(row, col): &(usize, usize)| -> bool { (row, col) == end_point },
+        |_| 1,
+        |&(row, col)| (row, col) == end_point,
     )?;
     Some(result.0)
 }
@@ -95,6 +95,7 @@ fn find_all_paths(
 ///
 /// * `map` - A reference to the map to be printed.
 /// * `path` - A slice of tuples representing the coordinates (row, col) of the path to be highlighted.
+///
 fn print_map_path(map: &Map, path: &[(usize, usize)]) {
     for (row_idx, row) in map.iter().enumerate() {
         for (col_idx, &cell) in row.iter().enumerate() {
