@@ -75,7 +75,10 @@ impl PrizeMachine {
 }
 
 fn button_permutations(size: usize) -> Vec<(usize, usize)> {
-    (0..=size).cartesian_product(0..=size).collect()
+    (0..=size)
+        .permutations(2)
+        .map(|perm| (perm[0], perm[1]))
+        .collect()
 }
 
 /// Reads the contents of the input file and returns a result of the file contents.
