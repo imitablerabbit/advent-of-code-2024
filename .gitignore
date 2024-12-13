@@ -21,3 +21,8 @@ Cargo.lock
 #.idea/
 
 input/
+
+
+# Added by cargo
+
+/target
