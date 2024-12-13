@@ -1,3 +1,4 @@
+use pathfinding::grid::Grid;
 use pathfinding::matrix::{Matrix, MatrixFormatError};
 use std::char;
 use std::collections::{HashMap, HashSet};
@@ -130,35 +131,13 @@ fn count_edges(coords: &[(usize, usize)]) -> usize {
 }
 
 fn print_plot_shape(plot: &Plot) {
-    let mut plot_map: HashMap<(usize, usize), char> = HashMap::new();
-    for (row, col) in &plot.coords {
-        plot_map.insert((*row, *col), plot.id);
-    }
-
-    let (min_row, max_row) = plot
-        .coords
-        .iter()
-        .fold((usize::MAX, usize::MIN), |acc, (row, _)| {
-            (acc.0.min(*row), acc.1.max(*row))
-        });
-    let (min_col, max_col) = plot
-        .coords
-        .iter()
-        .fold((usize::MAX, usize::MIN), |acc, (_, col)| {
-            (acc.0.min(*col), acc.1.max(*col))
-        });
-
-    for row in min_row..=max_row {
-        for col in min_col..=max_col {
-            let c = plot_map.get(&(row, col)).unwrap_or(&'.');
-            print!("{}", c);
-        }
-        println!();
-    }
+    let inverted_coords: Vec<(usize, usize)> = plot.coords.iter().map(|&(r, c)| (c, r)).collect();
+    let grid = Grid::from_coordinates(&inverted_coords); // Grid uses (x, y) coordinates
+    println!("{:?}", grid.unwrap());
 }
 
 fn main() {
-    let puzzle_path = "input/input.txt";
+    let puzzle_path = "input/input_example4.txt";
     let puzzle_input = read_to_string(puzzle_path).unwrap();
     let map = parse(&puzzle_input).unwrap();
     let plots = find_plots_dimensions(map);
