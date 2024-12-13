@@ -64,6 +64,8 @@ impl PrizeMachine {
         }
     }
 
+    // Rearrange the equations to have m on one side:
+    //
     // m = (x - ni) / j
     // m = (y - nk) / l
     //
@@ -73,6 +75,7 @@ impl PrizeMachine {
     // lx - jy = lni - jnk
     // lx - jy = n(li - jk)
     // n = (lx - jy) / (li - jk)
+    //
     fn n(&self) -> i64 {
         let i = self.button_a.x;
         let j = self.button_b.x;
@@ -159,9 +162,9 @@ fn parse_button(input: &str) -> Result<Delta, std::num::ParseIntError> {
     Ok(Delta::new(xy.0, xy.1))
 }
 
-// Parse a button string in the format of:
+// Parse a location string in the format of:
 //
-// Button A: X+94, Y+34
+// Prize: X=8400, Y=5400
 //
 fn parse_location(input: &str) -> Result<Location, std::num::ParseIntError> {
     let xy = parse_x_y(input)?;
@@ -202,25 +205,25 @@ mod tests {
 
     #[test]
     fn test_parse_location() {
-        let input = "Prize: X+94, Y+34";
-        let expected = Location::new(94, 34);
+        let input = "Prize: X=94, Y=34";
+        let expected = Location::new(94 + 10000000000000, 34 + 10000000000000);
         let result = parse_location(input).unwrap();
         assert_eq!(result, expected);
     }
 
     #[test]
     fn test_parse_input() {
-        let input = "Button A: X+94, Y+34\nButton B: X+94, Y+34\nPrize: X+94, Y+34\n\nButton A: X+94, Y+34\nButton B: X+94, Y+34\nPrize: X+94, Y+34";
+        let input = "Button A: X+94, Y+34\nButton B: X+94, Y+34\nPrize: X=94, Y=34\n\nButton A: X+94, Y+34\nButton B: X+94, Y+34\nPrize: X=94, Y=34";
         let expected = vec![
             PrizeMachine::new(
                 Delta::new(94, 34),
                 Delta::new(94, 34),
-                Location::new(94, 34),
+                Location::new(94 + 10000000000000, 34 + 10000000000000),
             ),
             PrizeMachine::new(
                 Delta::new(94, 34),
                 Delta::new(94, 34),
-                Location::new(94, 34),
+                Location::new(94 + 10000000000000, 34 + 10000000000000),
             ),
         ];
         let result = parse_input(input).unwrap();
