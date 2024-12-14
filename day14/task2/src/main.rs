@@ -1,5 +1,7 @@
+use colored::Colorize;
 use itertools::Itertools;
 use pathfinding::prelude::Matrix;
+use rayon::prelude::*;
 use std::{fs::File, io::Read};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -11,21 +13,19 @@ struct Robot {
 }
 
 impl Robot {
-    fn step(&mut self, x_bound: i32, y_bound: i32) {
-        self.x += self.dx;
-        self.y += self.dy;
+    fn simulate(&self, steps: i32, x_bound: i32, y_bound: i32) -> Robot {
+        let mut x = self.x + self.dx * steps;
+        let mut y = self.y + self.dy * steps;
 
         // Implement wrapping around the bounds
-        if self.x < 0 {
-            self.x += x_bound;
-        } else if self.x >= x_bound {
-            self.x -= x_bound;
-        }
+        x = ((x % x_bound) + x_bound) % x_bound;
+        y = ((y % y_bound) + y_bound) % y_bound;
 
-        if self.y < 0 {
-            self.y += y_bound;
-        } else if self.y >= y_bound {
-            self.y -= y_bound;
+        Robot {
+            x,
+            y,
+            dx: self.dx,
+            dy: self.dy,
         }
     }
 }
@@ -55,7 +55,7 @@ fn parse(input: &str) -> Vec<Robot> {
         .collect()
 }
 
-fn create_robot_map_image(robots: &[Robot], x_bound: i32, y_bound: i32, name: &str) {
+fn print_robot_map(robots: &[Robot], x_bound: i32, y_bound: i32) {
     let matrix = Matrix::from_fn(y_bound as usize, x_bound as usize, |(y, x)| {
         robots
             .iter()
@@ -63,38 +63,36 @@ fn create_robot_map_image(robots: &[Robot], x_bound: i32, y_bound: i32, name: &s
             .count()
     });
 
-    let mut imgbuf = image::ImageBuffer::new(x_bound as u32, y_bound as u32);
+    for y in 0..y_bound {
+        for x in 0..x_bound {
+            let c = match matrix[(y as usize, x as usize)] {
+                0 => " ".to_string(),
+                _ => "█".to_string(),
+            };
 
-    for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        let c = match matrix[(y as usize, x as usize)] {
-            0 => image::Rgb([255u8, 255u8, 255u8]),
-            _ => image::Rgb([255u8, 0u8, 0u8]),
-        };
-
-        *pixel = c;
+            print!("{:1}", c.red());
+        }
+        println!();
     }
-
-    imgbuf.save(name).unwrap();
 }
 
 fn main() {
     let puzzle_path = "input/input.txt";
     let puzzle_input = read_to_string(puzzle_path).unwrap();
-    let mut robots = parse(&puzzle_input);
+    let robots = parse(&puzzle_input);
     let x_bound = 101;
     let y_bound = 103;
-    for i in 1..=(101 * 103) {
-        println!("Step: {}", i);
 
-        robots
-            .iter_mut()
-            .for_each(|robot| robot.step(x_bound, y_bound));
+    (1..=(101 * 103)).into_par_iter().find_any(|&i| {
+        let positions: Vec<_> = robots
+            .iter()
+            .map(|robot| robot.simulate(i, x_bound, y_bound))
+            .collect();
 
         let m = Matrix::from_fn(y_bound as usize, x_bound as usize, |(y, x)| {
-            robots
+            positions
                 .iter()
-                .filter(|robot| robot.x == x as i32 && robot.y == y as i32)
-                .count()
+                .any(|robot| robot.x == x as i32 && robot.y == y as i32) as i32
         });
 
         // Loop over the rows in the matrix and compress them into tuples of (char, count)
@@ -106,10 +104,12 @@ fn main() {
             .any(|count| count > 10);
 
         if has_10_consecutive {
-            create_robot_map_image(&robots, x_bound, y_bound, &format!("output/{}.png", i));
-            break;
+            print_robot_map(&positions, x_bound, y_bound);
+            true
+        } else {
+            false
         }
-    }
+    });
 }
 
 #[cfg(test)]
@@ -230,19 +230,99 @@ p=9,5 v=-3,-3"#;
     }
 
     #[test]
-    fn test_step() {
-        let mut robot = Robot {
+    fn test_simulate() {
+        let robot = Robot {
             x: 0,
             y: 0,
             dx: 1,
             dy: 1,
         };
-        robot.step(10, 10);
         assert_eq!(
-            robot,
+            robot.simulate(1, 10, 10),
             Robot {
                 x: 1,
                 y: 1,
+                dx: 1,
+                dy: 1
+            }
+        );
+        assert_eq!(
+            robot.simulate(2, 10, 10),
+            Robot {
+                x: 2,
+                y: 2,
+                dx: 1,
+                dy: 1
+            }
+        );
+        assert_eq!(
+            robot.simulate(3, 10, 10),
+            Robot {
+                x: 3,
+                y: 3,
+                dx: 1,
+                dy: 1
+            }
+        );
+        assert_eq!(
+            robot.simulate(4, 10, 10),
+            Robot {
+                x: 4,
+                y: 4,
+                dx: 1,
+                dy: 1
+            }
+        );
+        assert_eq!(
+            robot.simulate(5, 10, 10),
+            Robot {
+                x: 5,
+                y: 5,
+                dx: 1,
+                dy: 1
+            }
+        );
+        assert_eq!(
+            robot.simulate(6, 10, 10),
+            Robot {
+                x: 6,
+                y: 6,
+                dx: 1,
+                dy: 1
+            }
+        );
+        assert_eq!(
+            robot.simulate(7, 10, 10),
+            Robot {
+                x: 7,
+                y: 7,
+                dx: 1,
+                dy: 1
+            }
+        );
+        assert_eq!(
+            robot.simulate(8, 10, 10),
+            Robot {
+                x: 8,
+                y: 8,
+                dx: 1,
+                dy: 1
+            }
+        );
+        assert_eq!(
+            robot.simulate(9, 10, 10),
+            Robot {
+                x: 9,
+                y: 9,
+                dx: 1,
+                dy: 1
+            }
+        );
+        assert_eq!(
+            robot.simulate(10, 10, 10),
+            Robot {
+                x: 0,
+                y: 0,
                 dx: 1,
                 dy: 1
             }
