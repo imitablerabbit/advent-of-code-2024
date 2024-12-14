@@ -26,3 +26,5 @@ input/
 # Added by cargo
 
 /target
+
+error.log

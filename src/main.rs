@@ -1,4 +1,4 @@
-use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode};
+use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent}; // Add KeyEvent import
 use crossterm::execute;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
@@ -6,16 +6,16 @@ use crossterm::terminal::{
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Style};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarState};
 use ratatui::Terminal;
 use regex::Regex;
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
-use tokio::fs;
 use tokio::fs::OpenOptions;
-use tokio::io::AsyncReadExt;
+use tokio::io::AsyncBufReadExt;
 use tokio::io::AsyncWriteExt;
+use tokio::process::Command;
 use tokio::sync::Mutex;
 use tui_tree_widget::{Tree, TreeItem, TreeState}; // Add TreeState import
 
@@ -53,6 +53,9 @@ struct App {
     file_tree_state: TreeState<String>,        // Add file_tree_state
     file_preview: String,
     error_message: Option<String>,
+    scroll_offset: usize, // Add scroll_offset to track the scroll position
+    total_lines: usize,   // Add total_lines to track the total number of lines in the preview
+    scrollbar_state: ScrollbarState, // Add scrollbar_state to manage scrollbar state
 }
 
 impl App {
@@ -65,6 +68,9 @@ impl App {
             file_tree_state,
             file_preview: "Press Enter to execute a task".to_string(),
             error_message: None,
+            scroll_offset: 0,
+            total_lines: 0,
+            scrollbar_state: ScrollbarState::default(), // Initialize scrollbar_state
         }
     }
 
@@ -87,7 +93,7 @@ impl App {
                         let dir_item =
                             TreeItem::new(dir_name.to_string(), dir_name.to_string(), vec![]);
                         if let Ok(mut dir_item) = dir_item {
-                            App::add_sub_items(&path, &mut dir_item);
+                            App::add_task_items(&path, &mut dir_item);
                             items.push(dir_item);
                         }
                     }
@@ -97,42 +103,60 @@ impl App {
         items
     }
 
-    fn add_sub_items(path: &Path, parent: &mut TreeItem<'static, String>) {
-        let paths = match std::fs::read_dir(path) {
-            Ok(paths) => paths,
-            Err(_) => return,
-        };
-
-        for path in paths {
-            let path = match path {
-                Ok(path) => path.path(),
-                Err(_) => continue,
-            };
-            if path.is_dir() {
-                if let Some(dir_name) = path.file_name().and_then(|n| n.to_str()) {
-                    if dir_name == "target" {
-                        continue;
-                    }
-                    let dir_item =
-                        TreeItem::new(dir_name.to_string(), dir_name.to_string(), vec![]);
-                    if let Ok(mut dir_item) = dir_item {
-                        App::add_sub_items(&path, &mut dir_item);
-                        match parent.add_child(dir_item) {
-                            Ok(_) => {}
-                            Err(_) => {
-                                println!("Error adding child");
-                            }
+    fn add_task_items(path: &Path, parent: &mut TreeItem<'static, String>) {
+        let tasks = ["task1", "task2"];
+        for task in tasks.iter() {
+            let task_path = path.join(task);
+            if task_path.is_dir() {
+                let task_item = TreeItem::new(task.to_string(), task.to_string(), vec![]);
+                if let Ok(task_item) = task_item {
+                    match parent.add_child(task_item) {
+                        Ok(_) => {}
+                        Err(_) => {
+                            println!("Error adding task");
                         }
                     }
                 }
-            } else if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                let leaf = TreeItem::new_leaf(file_name.to_string(), file_name.to_string());
-                match parent.add_child(leaf) {
-                    Ok(_) => {}
-                    Err(_) => {
-                        println!("Error adding leaf");
-                    }
-                }
+            }
+        }
+    }
+
+    async fn run_task(&mut self, task_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let full_path = std::env::current_dir().unwrap().join(task_path);
+        self.log_error(full_path.to_str().unwrap()).await;
+
+        // Clear the preview pane and reset scroll offset
+        self.file_preview.clear();
+        self.scroll_offset = 0;
+        self.total_lines = 0;
+
+        let mut command = Command::new("cargo")
+            .arg("run")
+            .arg("--quiet") // Add --quiet to hide warnings
+            .current_dir(full_path)
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .expect("Failed to start task");
+
+        let stdout = command.stdout.take().expect("Failed to open stdout");
+        let mut reader = tokio::io::BufReader::new(stdout).lines();
+
+        while let Some(line) = reader.next_line().await? {
+            self.file_preview.push_str(&line);
+            self.file_preview.push('\n');
+            self.scroll_offset += 1; // Increment scroll offset for each new line
+            self.total_lines += 1; // Increment total lines for each new line
+            self.scrollbar_state =
+                ScrollbarState::new(self.total_lines).position(self.scroll_offset);
+        }
+
+        let output = command.wait().await;
+
+        match output {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                self.error_message = Some(format!("Failed to run task: {}", e));
+                Err(Box::new(e))
             }
         }
     }
@@ -158,11 +182,6 @@ impl App {
             eprintln!("Failed to write to log file: {}", e);
         }
     }
-}
-
-enum AppEvent {
-    LoadFile(String),
-    Key(KeyCode),
 }
 
 async fn run_app<B: ratatui::backend::Backend>(
@@ -221,9 +240,20 @@ async fn run_app<B: ratatui::backend::Backend>(
 
             f.render_stateful_widget(file_tree, main_chunks[0], &mut app.file_tree_state);
 
+            let preview_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(95), Constraint::Percentage(5)].as_ref())
+                .split(main_chunks[1]);
+
             let file_preview_block = Block::default().borders(Borders::ALL).title("Preview");
-            let file_preview = Paragraph::new(app.file_preview.as_str()).block(file_preview_block);
-            f.render_widget(file_preview, main_chunks[1]);
+            let file_preview = Paragraph::new(app.file_preview.as_str())
+                .block(file_preview_block)
+                .scroll((app.scroll_offset.saturating_sub(10).try_into().unwrap(), 0)); // Scroll the preview pane
+            f.render_widget(file_preview, preview_chunks[0]);
+
+            let scrollbar = Scrollbar::default()
+                .style(Style::default().fg(Color::Yellow));
+            f.render_stateful_widget(scrollbar, preview_chunks[0], &mut app.scrollbar_state);
 
             if let Some(error_message) = &app.error_message {
                 let error_block = Block::default()
@@ -260,9 +290,9 @@ async fn run_app<B: ratatui::backend::Backend>(
             }
         })?;
 
-        if let Event::Key(key) = event::read()? {
+        if let Event::Key(KeyEvent { code, .. }) = event::read()? {
             let mut app = app;
-            match key.code {
+            match code {
                 KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
                 KeyCode::Down | KeyCode::Char('s') => {
                     app.file_tree_state.key_down();
@@ -279,10 +309,33 @@ async fn run_app<B: ratatui::backend::Backend>(
                 KeyCode::Enter => {
                     if app.error_message.is_some() {
                         app.error_message = None;
-                    } else if let Some(file_name) = app.file_tree_state.selected().last() {
-                        let file_path = format!("./{}", file_name);
-                        // app.load_file(&file_path).await;
+                        return Ok(());
                     }
+
+                    let file_path = app.file_tree_state.selected().join("/");
+                    if file_path.contains("task") {
+                        if let Err(e) = app.run_task(&file_path).await {
+                            app.error_message = Some(format!("Failed to run task: {}", e));
+                        }
+                    }
+                }
+                KeyCode::PageUp => {
+                    if app.scroll_offset > 10 {
+                        app.scroll_offset -= 10;
+                    } else {
+                        app.scroll_offset = 0;
+                    }
+                    app.scrollbar_state =
+                        ScrollbarState::new(app.total_lines).position(app.scroll_offset);
+                }
+                KeyCode::PageDown => {
+                    if app.scroll_offset + 10 < app.total_lines {
+                        app.scroll_offset += 10;
+                    } else {
+                        app.scroll_offset = app.total_lines;
+                    }
+                    app.scrollbar_state =
+                        ScrollbarState::new(app.total_lines).position(app.scroll_offset);
                 }
                 _ => {}
             }
