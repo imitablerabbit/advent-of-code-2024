@@ -83,21 +83,32 @@ fn main() {
     let mut robots = parse(&puzzle_input);
     let x_bound = 101;
     let y_bound = 103;
-    for i in 0..=8000 {
-        // Yep. Generate all the frames and go through them manually. There is
-        // a pattern that emerges and you can see them aligning horizontally and
-        // vertically. We need the frame where they both align based on the width
-        // and height of the frame.
-        //
-        // Im too dumb to figure out the math to calculate the frame where they align
-        // so I just went through them manually.
+    for i in 1..=(101 * 103) {
+        println!("Step: {}", i);
 
         robots
             .iter_mut()
             .for_each(|robot| robot.step(x_bound, y_bound));
 
-        let name = format!("output/{}.png", i);
-        create_robot_map_image(&robots, x_bound, y_bound, &name);
+        let m = Matrix::from_fn(y_bound as usize, x_bound as usize, |(y, x)| {
+            robots
+                .iter()
+                .filter(|robot| robot.x == x as i32 && robot.y == y as i32)
+                .count()
+        });
+
+        // Loop over the rows in the matrix and compress them into tuples of (char, count)
+        let has_10_consecutive = m
+            .values()
+            .chunk_by(|&&k| k)
+            .into_iter()
+            .filter_map(|(key, group)| if key == 1 { Some(group.count()) } else { None })
+            .any(|count| count > 10);
+
+        if has_10_consecutive {
+            create_robot_map_image(&robots, x_bound, y_bound, &format!("output/{}.png", i));
+            break;
+        }
     }
 }
 
