@@ -55,6 +55,38 @@ fn parse(input: &str) -> Vec<Robot> {
         .collect()
 }
 
+// Split the robots based on which of the 4 quadrants they are in.
+fn split_into_quadrants(robots: Vec<Robot>, x_bound: i32, y_bound: i32) -> Vec<Vec<Robot>> {
+    let mut quadrants = vec![vec![]; 4];
+    for robot in robots {
+        if robot.x < x_bound / 2 && robot.y < y_bound / 2 {
+            quadrants[0].push(robot);
+        } else if robot.x >= x_bound / 2 && robot.y < y_bound / 2 {
+            quadrants[1].push(robot);
+        } else if robot.x < x_bound / 2 && robot.y >= y_bound / 2 {
+            quadrants[2].push(robot);
+        } else {
+            quadrants[3].push(robot);
+        }
+    }
+    quadrants
+}
+
+// Robots that are perfectly on a quadrant boundary are filtered out.
+fn filter_middle_robots(robots: Vec<Robot>, x_bound: i32, y_bound: i32) -> Vec<Robot> {
+    robots
+        .into_iter()
+        .filter(|robot| robot.x != x_bound / 2 && robot.y != y_bound / 2)
+        .collect()
+}
+
+fn safety_factor(quadrants: &[Vec<Robot>]) -> i32 {
+    let safety_factor = quadrants
+        .iter()
+        .fold(1, |acc, quadrant| quadrant.len() * acc);
+    safety_factor as i32
+}
+
 fn print_robot_map(robots: &[Robot], x_bound: i32, y_bound: i32) {
     let matrix = Matrix::from_fn(y_bound as usize, x_bound as usize, |(y, x)| {
         robots
@@ -83,33 +115,30 @@ fn main() {
     let x_bound = 101;
     let y_bound = 103;
 
-    (1..=(101 * 103)).into_par_iter().find_any(|&i| {
-        let positions: Vec<_> = robots
-            .iter()
-            .map(|robot| robot.simulate(i, x_bound, y_bound))
-            .collect();
-
-        let m = Matrix::from_fn(y_bound as usize, x_bound as usize, |(y, x)| {
-            positions
+    // Use the safety factor to find the frame where the robots are the least
+    // spread out.
+    let tree_frame = (1..=(101 * 103))
+        .into_par_iter()
+        .map(|i| {
+            let positions: Vec<_> = robots
                 .iter()
-                .any(|robot| robot.x == x as i32 && robot.y == y as i32) as i32
-        });
+                .map(|robot| robot.simulate(i, x_bound, y_bound))
+                .collect();
 
-        // Loop over the rows in the matrix and compress them into tuples of (char, count)
-        let has_10_consecutive = m
-            .values()
-            .chunk_by(|&&k| k)
-            .into_iter()
-            .filter_map(|(key, group)| if key == 1 { Some(group.count()) } else { None })
-            .any(|count| count > 10);
+            let filtered_positions = filter_middle_robots(positions, x_bound, y_bound);
+            let quadrants = split_into_quadrants(filtered_positions, x_bound, y_bound);
+            (i, safety_factor(&quadrants))
+        })
+        .min_by_key(|(_, safety_factor)| *safety_factor)
+        .unwrap()
+        .0;
 
-        if has_10_consecutive {
-            print_robot_map(&positions, x_bound, y_bound);
-            true
-        } else {
-            false
-        }
-    });
+    let positions: Vec<_> = robots
+        .iter()
+        .map(|robot| robot.simulate(tree_frame, x_bound, y_bound))
+        .collect();
+
+    print_robot_map(&positions, x_bound, y_bound);
 }
 
 #[cfg(test)]
