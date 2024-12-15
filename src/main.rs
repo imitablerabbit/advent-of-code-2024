@@ -48,29 +48,98 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-struct App {
-    file_tree: Vec<TreeItem<'static, String>>, // Replace file_picker with file_tree
-    file_tree_state: TreeState<String>,        // Add file_tree_state
+struct TaskFinder {
+    file_tree: Vec<TreeItem<'static, String>>,
+    file_tree_state: TreeState<String>,
+}
+
+impl TaskFinder {
+    fn new() -> TaskFinder {
+        let file_tree = App::load_file_tree();
+        let mut file_tree_state = TreeState::default();
+        Self::open_all_day_tasks(&file_tree, &mut file_tree_state);
+        file_tree_state.select_first();
+        TaskFinder {
+            file_tree,
+            file_tree_state,
+        }
+    }
+
+    fn open_all_day_tasks(
+        file_tree: &Vec<TreeItem<String>>,
+        file_tree_state: &mut TreeState<String>,
+    ) {
+        file_tree.iter().for_each(|i| {
+            let identifier = i.identifier().to_string();
+            file_tree_state.open(vec![identifier]);
+        });
+    }
+
+    fn render<B: ratatui::backend::Backend>(
+        &mut self,
+        f: &mut ratatui::Frame,
+        area: ratatui::layout::Rect,
+    ) {
+        let binding = self.file_tree.clone();
+        let file_tree = Tree::new(&binding)
+            .unwrap()
+            .block(Block::default().borders(Borders::ALL).title("Files"))
+            .highlight_style(Style::default().fg(Color::Yellow))
+            .highlight_symbol(">> ");
+        f.render_stateful_widget(file_tree, area, &mut self.file_tree_state);
+    }
+}
+
+struct TaskPreview {
     file_preview: String,
+    scroll_offset: usize,
+    total_lines: usize,
+    scrollbar_state: ScrollbarState,
+}
+
+impl TaskPreview {
+    fn new() -> TaskPreview {
+        TaskPreview {
+            file_preview: "Press Enter to execute a task".to_string(),
+            scroll_offset: 0,
+            total_lines: 0,
+            scrollbar_state: ScrollbarState::default(),
+        }
+    }
+
+    fn render<B: ratatui::backend::Backend>(
+        &mut self,
+        f: &mut ratatui::Frame,
+        area: ratatui::layout::Rect,
+    ) {
+        let preview_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(0), Constraint::Length(1)].as_ref())
+            .split(area);
+
+        let file_preview_block = Block::default().borders(Borders::ALL).title("Preview");
+        let file_preview = Paragraph::new(self.file_preview.as_str())
+            .block(file_preview_block)
+            .scroll((self.scroll_offset.saturating_sub(10).try_into().unwrap(), 0));
+        f.render_widget(file_preview, preview_chunks[0]);
+
+        let scrollbar = Scrollbar::default().style(Style::default().fg(Color::Yellow));
+        f.render_stateful_widget(scrollbar, preview_chunks[1], &mut self.scrollbar_state);
+    }
+}
+
+struct App {
+    task_finder: TaskFinder,
+    task_preview: TaskPreview,
     error_message: Option<String>,
-    scroll_offset: usize, // Add scroll_offset to track the scroll position
-    total_lines: usize,   // Add total_lines to track the total number of lines in the preview
-    scrollbar_state: ScrollbarState, // Add scrollbar_state to manage scrollbar state
 }
 
 impl App {
     fn new() -> App {
-        let file_tree = App::load_file_tree(); // Initialize file_tree
-        let mut file_tree_state = TreeState::default();
-        file_tree_state.select_first(); // Select the first item by default
         App {
-            file_tree,
-            file_tree_state,
-            file_preview: "Press Enter to execute a task".to_string(),
+            task_finder: TaskFinder::new(),
+            task_preview: TaskPreview::new(),
             error_message: None,
-            scroll_offset: 0,
-            total_lines: 0,
-            scrollbar_state: ScrollbarState::default(), // Initialize scrollbar_state
         }
     }
 
@@ -100,6 +169,7 @@ impl App {
                 }
             }
         }
+
         items
     }
 
@@ -125,16 +195,16 @@ impl App {
         let full_path = std::env::current_dir().unwrap().join(task_path);
         self.log_error(full_path.to_str().unwrap()).await;
 
-        // Clear the preview pane and reset scroll offset
-        self.file_preview.clear();
-        self.scroll_offset = 0;
-        self.total_lines = 0;
+        self.task_preview.file_preview.clear();
+        self.task_preview.scroll_offset = 0;
+        self.task_preview.total_lines = 0;
 
         let mut command = Command::new("cargo")
             .arg("run")
-            .arg("--quiet") // Add --quiet to hide warnings
+            .arg("--quiet")
             .current_dir(full_path)
             .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
             .spawn()
             .expect("Failed to start task");
 
@@ -142,12 +212,11 @@ impl App {
         let mut reader = tokio::io::BufReader::new(stdout).lines();
 
         while let Some(line) = reader.next_line().await? {
-            self.file_preview.push_str(&line);
-            self.file_preview.push('\n');
-            self.scroll_offset += 1; // Increment scroll offset for each new line
-            self.total_lines += 1; // Increment total lines for each new line
-            self.scrollbar_state =
-                ScrollbarState::new(self.total_lines).position(self.scroll_offset);
+            self.task_preview.file_preview.push_str(&line);
+            self.task_preview.file_preview.push('\n');
+            self.task_preview.total_lines += 1;
+            self.task_preview.scrollbar_state = ScrollbarState::new(self.task_preview.total_lines)
+                .position(self.task_preview.scroll_offset);
         }
 
         let output = command.wait().await;
@@ -231,29 +300,8 @@ async fn run_app<B: ratatui::backend::Backend>(
                 .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
                 .split(chunks[1]);
 
-            let binding = app.file_tree.clone();
-            let file_tree = Tree::new(&binding)
-                .unwrap()
-                .block(Block::default().borders(Borders::ALL).title("Files"))
-                .highlight_style(Style::default().fg(Color::Yellow))
-                .highlight_symbol(">> ");
-
-            f.render_stateful_widget(file_tree, main_chunks[0], &mut app.file_tree_state);
-
-            let preview_chunks = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(95), Constraint::Percentage(5)].as_ref())
-                .split(main_chunks[1]);
-
-            let file_preview_block = Block::default().borders(Borders::ALL).title("Preview");
-            let file_preview = Paragraph::new(app.file_preview.as_str())
-                .block(file_preview_block)
-                .scroll((app.scroll_offset.saturating_sub(10).try_into().unwrap(), 0)); // Scroll the preview pane
-            f.render_widget(file_preview, preview_chunks[0]);
-
-            let scrollbar = Scrollbar::default()
-                .style(Style::default().fg(Color::Yellow));
-            f.render_stateful_widget(scrollbar, preview_chunks[0], &mut app.scrollbar_state);
+            app.task_finder.render::<CrosstermBackend<std::io::Stdout>>(f, main_chunks[0]);
+            app.task_preview.render::<CrosstermBackend<std::io::Stdout>>(f, main_chunks[1]);
 
             if let Some(error_message) = &app.error_message {
                 let error_block = Block::default()
@@ -285,7 +333,7 @@ async fn run_app<B: ratatui::backend::Backend>(
                         .as_ref(),
                     )
                     .split(area)[1];
-                f.render_widget(Clear, area); // Clear the area before rendering the error message
+                f.render_widget(Clear, area);
                 f.render_widget(error_paragraph, area);
             }
         })?;
@@ -295,16 +343,16 @@ async fn run_app<B: ratatui::backend::Backend>(
             match code {
                 KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
                 KeyCode::Down | KeyCode::Char('s') => {
-                    app.file_tree_state.key_down();
+                    app.task_finder.file_tree_state.key_down();
                 }
                 KeyCode::Up | KeyCode::Char('w') => {
-                    app.file_tree_state.key_up();
+                    app.task_finder.file_tree_state.key_up();
                 }
                 KeyCode::Right | KeyCode::Char('d') => {
-                    app.file_tree_state.key_right();
+                    app.task_finder.file_tree_state.key_right();
                 }
                 KeyCode::Left | KeyCode::Char('a') => {
-                    app.file_tree_state.key_left();
+                    app.task_finder.file_tree_state.key_left();
                 }
                 KeyCode::Enter => {
                     if app.error_message.is_some() {
@@ -312,7 +360,7 @@ async fn run_app<B: ratatui::backend::Backend>(
                         return Ok(());
                     }
 
-                    let file_path = app.file_tree_state.selected().join("/");
+                    let file_path = app.task_finder.file_tree_state.selected().join("/");
                     if file_path.contains("task") {
                         if let Err(e) = app.run_task(&file_path).await {
                             app.error_message = Some(format!("Failed to run task: {}", e));
@@ -320,22 +368,24 @@ async fn run_app<B: ratatui::backend::Backend>(
                     }
                 }
                 KeyCode::PageUp => {
-                    if app.scroll_offset > 10 {
-                        app.scroll_offset -= 10;
+                    if app.task_preview.scroll_offset > 10 {
+                        app.task_preview.scroll_offset -= 10;
                     } else {
-                        app.scroll_offset = 0;
+                        app.task_preview.scroll_offset = 0;
                     }
-                    app.scrollbar_state =
-                        ScrollbarState::new(app.total_lines).position(app.scroll_offset);
+                    app.task_preview.scrollbar_state =
+                        ScrollbarState::new(app.task_preview.total_lines)
+                            .position(app.task_preview.scroll_offset);
                 }
                 KeyCode::PageDown => {
-                    if app.scroll_offset + 10 < app.total_lines {
-                        app.scroll_offset += 10;
+                    if app.task_preview.scroll_offset + 10 < app.task_preview.total_lines {
+                        app.task_preview.scroll_offset += 10;
                     } else {
-                        app.scroll_offset = app.total_lines;
+                        app.task_preview.scroll_offset = app.task_preview.total_lines;
                     }
-                    app.scrollbar_state =
-                        ScrollbarState::new(app.total_lines).position(app.scroll_offset);
+                    app.task_preview.scrollbar_state =
+                        ScrollbarState::new(app.task_preview.total_lines)
+                            .position(app.task_preview.scroll_offset);
                 }
                 _ => {}
             }
