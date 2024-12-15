@@ -52,8 +52,6 @@ impl Map {
 
         let new_position = new_position.unwrap();
 
-        println!("Moving from {:?} to {:?}", self.position, new_position);
-
         let value = self.map.get(new_position);
         match value {
             Some(&FREE_SPACE) => self.move_to_free_space(new_position),

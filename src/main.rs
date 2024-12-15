@@ -151,22 +151,35 @@ impl App {
             Err(_) => return items,
         };
 
+        // Find all directories in the current directory that match the regex
+        let filtered_paths = paths
+            .filter(|p| p.is_ok())
+            .filter(|p| p.as_ref().unwrap().path().is_dir())
+            .filter(|p| {
+                let binding = p.as_ref().unwrap().path();
+                let dir_name = binding.file_name().and_then(|n| n.to_str());
+                dir_name.is_some() && re.is_match(dir_name.unwrap())
+            });
+
+        // Sort the paths numerically by day
+        let mut paths: Vec<_> = filtered_paths.collect();
+        paths.sort_by(|a, b| {
+            let a = a.as_ref().unwrap().path();
+            let b = b.as_ref().unwrap().path();
+            let a = a.file_name().and_then(|n| n.to_str()).unwrap();
+            let b = b.file_name().and_then(|n| n.to_str()).unwrap();
+            let a = a.trim_start_matches("day").parse::<u32>().unwrap();
+            let b = b.trim_start_matches("day").parse::<u32>().unwrap();
+            a.cmp(&b)
+        });
+
         for path in paths {
-            let path = match path {
-                Ok(path) => path.path(),
-                Err(_) => continue,
-            };
-            if path.is_dir() {
-                if let Some(dir_name) = path.file_name().and_then(|n| n.to_str()) {
-                    if re.is_match(dir_name) {
-                        let dir_item =
-                            TreeItem::new(dir_name.to_string(), dir_name.to_string(), vec![]);
-                        if let Ok(mut dir_item) = dir_item {
-                            App::add_task_items(&path, &mut dir_item);
-                            items.push(dir_item);
-                        }
-                    }
-                }
+            let path = path.as_ref().unwrap().path();
+            let dir_name = path.file_name().unwrap().to_str().unwrap();
+            let dir_item = TreeItem::new(dir_name.to_string(), dir_name.to_string(), vec![]);
+            if let Ok(mut dir_item) = dir_item {
+                App::add_task_items(&path, &mut dir_item);
+                items.push(dir_item);
             }
         }
 
