@@ -1,4 +1,12 @@
-use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent}; // Add KeyEvent import
+mod header;
+mod taskfinder;
+mod taskpreview;
+
+use header::{Controls, Header};
+use taskfinder::TaskFinder;
+use taskpreview::TaskPreview;
+
+use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent};
 use crossterm::execute;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
@@ -6,18 +14,13 @@ use crossterm::terminal::{
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Style};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarState};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, ScrollbarState};
 use ratatui::Terminal;
-use regex::Regex;
 use std::io;
-use std::path::Path;
 use std::sync::Arc;
 use tokio::fs::OpenOptions;
-use tokio::io::AsyncBufReadExt;
 use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
 use tokio::sync::Mutex;
-use tui_tree_widget::{Tree, TreeItem, TreeState}; // Add TreeState import
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -48,88 +51,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-struct TaskFinder {
-    file_tree: Vec<TreeItem<'static, String>>,
-    file_tree_state: TreeState<String>,
-}
-
-impl TaskFinder {
-    fn new() -> TaskFinder {
-        let file_tree = App::load_file_tree();
-        let mut file_tree_state = TreeState::default();
-        Self::open_all_day_tasks(&file_tree, &mut file_tree_state);
-        file_tree_state.select_first();
-        TaskFinder {
-            file_tree,
-            file_tree_state,
-        }
-    }
-
-    fn open_all_day_tasks(
-        file_tree: &Vec<TreeItem<String>>,
-        file_tree_state: &mut TreeState<String>,
-    ) {
-        file_tree.iter().for_each(|i| {
-            let identifier = i.identifier().to_string();
-            file_tree_state.open(vec![identifier]);
-        });
-    }
-
-    fn render<B: ratatui::backend::Backend>(
-        &mut self,
-        f: &mut ratatui::Frame,
-        area: ratatui::layout::Rect,
-    ) {
-        let binding = self.file_tree.clone();
-        let file_tree = Tree::new(&binding)
-            .unwrap()
-            .block(Block::default().borders(Borders::ALL).title("Files"))
-            .highlight_style(Style::default().fg(Color::Yellow))
-            .highlight_symbol(">> ");
-        f.render_stateful_widget(file_tree, area, &mut self.file_tree_state);
-    }
-}
-
-struct TaskPreview {
-    file_preview: String,
-    scroll_offset: usize,
-    total_lines: usize,
-    scrollbar_state: ScrollbarState,
-}
-
-impl TaskPreview {
-    fn new() -> TaskPreview {
-        TaskPreview {
-            file_preview: "Press Enter to execute a task".to_string(),
-            scroll_offset: 0,
-            total_lines: 0,
-            scrollbar_state: ScrollbarState::default(),
-        }
-    }
-
-    fn render<B: ratatui::backend::Backend>(
-        &mut self,
-        f: &mut ratatui::Frame,
-        area: ratatui::layout::Rect,
-    ) {
-        let preview_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(0), Constraint::Length(1)].as_ref())
-            .split(area);
-
-        let file_preview_block = Block::default().borders(Borders::ALL).title("Preview");
-        let file_preview = Paragraph::new(self.file_preview.as_str())
-            .block(file_preview_block)
-            .scroll((self.scroll_offset.saturating_sub(10).try_into().unwrap(), 0));
-        f.render_widget(file_preview, preview_chunks[0]);
-
-        let scrollbar = Scrollbar::default().style(Style::default().fg(Color::Yellow));
-        f.render_stateful_widget(scrollbar, preview_chunks[1], &mut self.scrollbar_state);
-    }
-}
-
 struct App {
-    task_finder: TaskFinder,
+    pub task_finder: TaskFinder,
     task_preview: TaskPreview,
     error_message: Option<String>,
 }
@@ -140,106 +63,6 @@ impl App {
             task_finder: TaskFinder::new(),
             task_preview: TaskPreview::new(),
             error_message: None,
-        }
-    }
-
-    fn load_file_tree() -> Vec<TreeItem<'static, String>> {
-        let mut items = Vec::new();
-        let re = Regex::new(r"^day\d+$").unwrap();
-        let paths = match std::fs::read_dir(".") {
-            Ok(paths) => paths,
-            Err(_) => return items,
-        };
-
-        // Find all directories in the current directory that match the regex
-        let filtered_paths = paths
-            .filter(|p| p.is_ok())
-            .filter(|p| p.as_ref().unwrap().path().is_dir())
-            .filter(|p| {
-                let binding = p.as_ref().unwrap().path();
-                let dir_name = binding.file_name().and_then(|n| n.to_str());
-                dir_name.is_some() && re.is_match(dir_name.unwrap())
-            });
-
-        // Sort the paths numerically by day
-        let mut paths: Vec<_> = filtered_paths.collect();
-        paths.sort_by(|a, b| {
-            let a = a.as_ref().unwrap().path();
-            let b = b.as_ref().unwrap().path();
-            let a = a.file_name().and_then(|n| n.to_str()).unwrap();
-            let b = b.file_name().and_then(|n| n.to_str()).unwrap();
-            let a = a.trim_start_matches("day").parse::<u32>().unwrap();
-            let b = b.trim_start_matches("day").parse::<u32>().unwrap();
-            a.cmp(&b)
-        });
-
-        for path in paths {
-            let path = path.as_ref().unwrap().path();
-            let dir_name = path.file_name().unwrap().to_str().unwrap();
-            let dir_item = TreeItem::new(dir_name.to_string(), dir_name.to_string(), vec![]);
-            if let Ok(mut dir_item) = dir_item {
-                App::add_task_items(&path, &mut dir_item);
-                items.push(dir_item);
-            }
-        }
-
-        items
-    }
-
-    fn add_task_items(path: &Path, parent: &mut TreeItem<'static, String>) {
-        let tasks = ["task1", "task2"];
-        for task in tasks.iter() {
-            let task_path = path.join(task);
-            if task_path.is_dir() {
-                let task_item = TreeItem::new(task.to_string(), task.to_string(), vec![]);
-                if let Ok(task_item) = task_item {
-                    match parent.add_child(task_item) {
-                        Ok(_) => {}
-                        Err(_) => {
-                            println!("Error adding task");
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    async fn run_task(&mut self, task_path: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let full_path = std::env::current_dir().unwrap().join(task_path);
-        self.log_error(full_path.to_str().unwrap()).await;
-
-        self.task_preview.file_preview.clear();
-        self.task_preview.scroll_offset = 0;
-        self.task_preview.total_lines = 0;
-
-        let mut command = Command::new("cargo")
-            .arg("run")
-            .arg("--quiet")
-            .current_dir(full_path)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .expect("Failed to start task");
-
-        let stdout = command.stdout.take().expect("Failed to open stdout");
-        let mut reader = tokio::io::BufReader::new(stdout).lines();
-
-        while let Some(line) = reader.next_line().await? {
-            self.task_preview.file_preview.push_str(&line);
-            self.task_preview.file_preview.push('\n');
-            self.task_preview.total_lines += 1;
-            self.task_preview.scrollbar_state = ScrollbarState::new(self.task_preview.total_lines)
-                .position(self.task_preview.scroll_offset);
-        }
-
-        let output = command.wait().await;
-
-        match output {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                self.error_message = Some(format!("Failed to run task: {}", e));
-                Err(Box::new(e))
-            }
         }
     }
 
@@ -283,28 +106,8 @@ async fn run_app<B: ratatui::backend::Backend>(
                 .constraints([Constraint::Percentage(80), Constraint::Percentage(20)].as_ref())
                 .split(chunks[0]);
 
-            let header = Paragraph::new(
-                r#"    _       _                 _            __    ____          _        ____   ___ ____  _  _   
-   / \   __| |_   _____ _ __ | |_    ___  / _|  / ___|___   __| | ___  |___ \ / _ \___ \| || |  
-  / _ \ / _` \ \ / / _ \ '_ \| __|  / _ \| |_  | |   / _ \ / _` |/ _ \   __) | | | |__) | || |_ 
- / ___ \ (_| |\ V /  __/ | | | |_  | (_) |  _| | |__| (_) | (_| |  __/  / __/| |_| / __/|__   _|
-/_/   \_\__,_| \_/ \___|_| |_|\__|  \___/|_|    \____\___/ \__,_|\___| |_____|\___/_____|  |_|  
-                "#,
-            )
-            .block(Block::default().borders(Borders::NONE));
-
-            let controls = Paragraph::new(
-                r#"Controls:
-  q: Quit
-  w: Up
-  s: Down
-  a: Left
-  d: Right
-                "#,
-            )
-            .block(Block::default().borders(Borders::NONE))
-            .alignment(ratatui::layout::Alignment::Right);
-
+            let header = Header::new();
+            let controls = Controls::new();
             f.render_widget(header, header_chunks[0]);
             f.render_widget(controls, header_chunks[1]);
 
@@ -313,8 +116,10 @@ async fn run_app<B: ratatui::backend::Backend>(
                 .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
                 .split(chunks[1]);
 
-            app.task_finder.render::<CrosstermBackend<std::io::Stdout>>(f, main_chunks[0]);
-            app.task_preview.render::<CrosstermBackend<std::io::Stdout>>(f, main_chunks[1]);
+            app.task_finder
+                .render::<CrosstermBackend<std::io::Stdout>>(f, main_chunks[0]);
+            app.task_preview
+                .render::<CrosstermBackend<std::io::Stdout>>(f, main_chunks[1]);
 
             if let Some(error_message) = &app.error_message {
                 let error_block = Block::default()
@@ -322,8 +127,8 @@ async fn run_app<B: ratatui::backend::Backend>(
                     .title("Error")
                     .border_style(Style::default().fg(Color::Red));
                 let error_message_text = format!("{}\n\nPress Enter to close", error_message);
-                let error_paragraph = Paragraph::new(error_message_text.as_str())
-                    .block(error_block);
+                let error_paragraph =
+                    Paragraph::new(error_message_text.as_str()).block(error_block);
                 let area = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints(
@@ -375,7 +180,7 @@ async fn run_app<B: ratatui::backend::Backend>(
 
                     let file_path = app.task_finder.file_tree_state.selected().join("/");
                     if file_path.contains("task") {
-                        if let Err(e) = app.run_task(&file_path).await {
+                        if let Err(e) = app.task_preview.run_task(&file_path).await {
                             app.error_message = Some(format!("Failed to run task: {}", e));
                         }
                     }
