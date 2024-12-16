@@ -1,8 +1,6 @@
 use colored::Colorize;
-use itertools::Itertools;
 use pathfinding::prelude::Matrix;
 use pathfinding::{matrix::directions, prelude::astar_bag_collect};
-use rayon::prelude::*;
 use std::{fs::File, io::Read};
 
 /// Point in the matrix represenitng a (col, row).
@@ -10,6 +8,15 @@ type Point = (usize, usize);
 
 type Direction = (isize, isize);
 
+/// Converts a direction tuple to a corresponding character.
+///
+/// # Arguments
+///
+/// * `direction` - A tuple representing the direction.
+///
+/// # Returns
+///
+/// * `char` - The character representing the direction.
 fn convert_direction(direction: Direction) -> char {
     match direction {
         directions::N => '^',
@@ -38,6 +45,15 @@ const END: char = 'E';
 const WALL: char = '#';
 
 impl Map {
+    /// Creates a new `Map` instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `map` - A `Matrix<char>` representing the map.
+    ///
+    /// # Returns
+    ///
+    /// * `Self` - A new `Map` instance.
     fn new(map: Matrix<char>) -> Self {
         let start_post = Self::find_char(&map, START).expect("Start not found");
         let end_post = Self::find_char(&map, END).expect("End not found");
@@ -50,6 +66,16 @@ impl Map {
         }
     }
 
+    /// Finds the position of a character in the map.
+    ///
+    /// # Arguments
+    ///
+    /// * `map` - A reference to the `Matrix<char>`.
+    /// * `c` - The character to find.
+    ///
+    /// # Returns
+    ///
+    /// * `Option<(usize, usize)>` - The position of the character, or `None` if not found.
     fn find_char(map: &Matrix<char>, c: char) -> Option<(usize, usize)> {
         for (col, row_chars) in map.iter().enumerate() {
             for (row, &cell) in row_chars.iter().enumerate() {
@@ -61,8 +87,16 @@ impl Map {
         None
     }
 
-    /// If we are travveling in the same direction the weight is 1. Each time we
-    /// rotate to the left or right the weight is invreased by 1000.
+    /// Calculates the weight of changing direction.
+    ///
+    /// # Arguments
+    ///
+    /// * `current` - The current direction.
+    /// * `new` - The new direction.
+    ///
+    /// # Returns
+    ///
+    /// * `usize` - The weight of changing direction.
     fn direction_weight(current: Direction, new: Direction) -> usize {
         match (current, new) {
             (directions::N, directions::N) => 1, // Same direction
@@ -85,26 +119,11 @@ impl Map {
         }
     }
 
-    fn print(&self) {
-        for (y, row) in self.map.iter().enumerate() {
-            for (x, &cell) in row.iter().enumerate() {
-                let colored_cell = if (x, y) == (self.position.1, self.position.0) {
-                    '@'.to_string().yellow().bold()
-                } else {
-                    match cell {
-                        FREE_SPACE => FREE_SPACE.to_string().white(),
-                        START => START.to_string().green(),
-                        END => END.to_string().green(),
-                        WALL => WALL.to_string().red(),
-                        _ => cell.to_string().normal(),
-                    }
-                };
-                print!("{}", colored_cell);
-            }
-            println!();
-        }
-    }
-
+    /// Prints the path on the map.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - A vector of tuples containing points and directions.
     fn print_path(&self, path: Vec<(Point, Direction)>) {
         let mut map = self.map.clone();
         path.iter()
@@ -146,6 +165,15 @@ fn read_to_string(puzzle_path: &str) -> Result<String, std::io::Error> {
     Ok(contents)
 }
 
+/// Parses the input string into a `Map` instance.
+///
+/// # Arguments
+///
+/// * `input` - A string slice containing the input.
+///
+/// # Returns
+///
+/// * `Map` - The parsed `Map` instance.
 fn parse(input: &str) -> Map {
     let matrix = Matrix::from_rows(input.lines().map(|l| l.chars())).expect("Invalid matrix");
     Map::new(matrix)
@@ -174,9 +202,4 @@ fn main() {
     let lowest_score = path.1;
     map.print_path(path.0.first().unwrap().clone());
     println!("Lowest score: {}", lowest_score);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
 }
