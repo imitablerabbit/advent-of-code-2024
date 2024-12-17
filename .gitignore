@@ -28,3 +28,5 @@ input/
 /target
 
 error.log
+
+.vscode/
