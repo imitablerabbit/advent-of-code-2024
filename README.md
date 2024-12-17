@@ -2,6 +2,8 @@
 
 Advent of Code 2024 solutions in Rust.
 
+![Index](index.png)
+
 ## Table of Contents
 
 - [Day 1](day1/)
